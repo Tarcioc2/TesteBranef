@@ -1,50 +1,54 @@
-﻿using System.Data;
-using Dapper;
+﻿using Dapper;
 using MediatR;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using Application.Queries.Cliente;
 using Application.Exceptions;
-using Domain.Interfaces;
 
 namespace Application.QueryHandlers.Cliente
 {
     public class ClienteQueryHandler :
-    IRequestHandler<GetClientesQuery, IEnumerable<ClienteDto>>,
-    IRequestHandler<GetClienteByIdQuery, ClienteDto>
+        IRequestHandler<GetClientesQuery, IEnumerable<ClienteDto>>,
+        IRequestHandler<GetClienteByIdQuery, ClienteDto>
     {
-        private readonly IClienteRepository _repository;
+        private readonly string _connectionString;
 
-        public ClienteQueryHandler(IClienteRepository repository)
+        public ClienteQueryHandler(IConfiguration configuration)
         {
-            _repository = repository;
+            _connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         }
 
         public async Task<IEnumerable<ClienteDto>> Handle(GetClientesQuery request, CancellationToken cancellationToken)
         {
-            var clientes = await _repository.GetAllAsync();
-            return clientes.Select(c => new ClienteDto
-            {
-                Id = c.Id,
-                NomeEmpresa = c.NomeEmpresa,
-                Porte = c.Porte.ToString()
-            });
+            using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT Id, NomeEmpresa, Porte
+                FROM Clientes with(nolock)";
+
+            return await connection.QueryAsync<ClienteDto>(sql);
         }
 
         public async Task<ClienteDto> Handle(GetClienteByIdQuery request, CancellationToken cancellationToken)
         {
-            var cliente = await _repository.GetByIdAsync(request.Id);
+            using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            const string sql = @"
+                SELECT Id, NomeEmpresa, Porte
+                FROM Clientes with(nolock)
+                WHERE Id = @Id";
+
+            var cliente = await connection.QuerySingleOrDefaultAsync<ClienteDto>(sql, new { Id = request.Id });
+
             if (cliente == null)
             {
-                throw new NotFoundException(nameof(Cliente), request.Id);
+                throw new NotFoundException(nameof(Domain.Clientes), request.Id);
             }
 
-            return new ClienteDto
-            {
-                Id = cliente.Id,
-                NomeEmpresa = cliente.NomeEmpresa,
-                Porte = cliente.Porte.ToString()
-            };
+            return cliente;
         }
     }
 }
-
-

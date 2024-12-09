@@ -26,7 +26,7 @@ namespace Application.Services
 
         public async Task<ClienteDto> GetClienteByIdAsync(Guid id)
         {
-            return await _mediator.Send(new GetClienteByIdQuery { Id = id });
+            return await _mediator.Send(new GetClienteByIdQuery(id));
         }
 
         public async Task AtualizarClienteAsync(AtualizarClienteCommand command)
